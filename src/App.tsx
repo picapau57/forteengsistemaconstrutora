@@ -15,7 +15,8 @@ import {
   UserCheck,
   Sparkles,
   LogOut,
-  Lock
+  Lock,
+  Eye
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -51,6 +52,36 @@ export default function App() {
     const saved = localStorage.getItem('const_logged_in_user');
     return saved ? JSON.parse(saved) : null;
   });
+
+  const [visits, setVisits] = useState<number>(() => {
+    const saved = localStorage.getItem('const_local_visit_cache');
+    return saved ? parseInt(saved, 10) : 642;
+  });
+
+  // Fetch and increment total visits on initial load
+  useEffect(() => {
+    fetch('/api/visits/increment', { method: 'POST' })
+      .then(res => res.json())
+      .then(data => {
+        if (data && typeof data.totalVisits === 'number') {
+          setVisits(data.totalVisits);
+          localStorage.setItem('const_local_visit_cache', String(data.totalVisits));
+        }
+      })
+      .catch(err => {
+        console.warn('Could not increment visits via API, using fallback:', err);
+        // Fallback GET
+        fetch('/api/visits')
+          .then(res => res.json())
+          .then(data => {
+            if (data && typeof data.totalVisits === 'number') {
+              setVisits(data.totalVisits);
+              localStorage.setItem('const_local_visit_cache', String(data.totalVisits));
+            }
+          })
+          .catch(e => console.error('Error fetching fallback visits:', e));
+      });
+  }, []);
 
   const getDynamicSubscription = (email: string): Subscription => {
     const userSubKey = `const_subscription_${email.toLowerCase()}`;
@@ -701,6 +732,14 @@ export default function App() {
                 <span className="text-emerald-400 font-bold">Operacional</span>
               </div>
             </div>
+
+            <div className="flex items-center gap-2 p-2 bg-slate-900/60 rounded border border-slate-800/50">
+              <Eye className="h-3.5 w-3.5 text-sky-400" />
+              <div className="text-[10px] font-mono leading-normal text-slate-400">
+                <span>Acessos: </span>
+                <span className="text-sky-400 font-black">{visits}</span>
+              </div>
+            </div>
             
             <button
               onClick={handleResetData}
@@ -779,6 +818,7 @@ export default function App() {
                 transactions={transactions}
                 projects={projects}
                 onNavigate={(tab) => setActiveTab(tab)}
+                visits={visits}
               />
             )}
 

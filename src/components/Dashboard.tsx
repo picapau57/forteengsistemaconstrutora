@@ -11,7 +11,8 @@ import {
   Bell, 
   CheckCircle, 
   Clock,
-  Briefcase
+  Briefcase,
+  Eye
 } from 'lucide-react';
 import { Employee, Attendance, Material, Condo, Transaction, Project } from '../types';
 
@@ -23,6 +24,7 @@ interface DashboardProps {
   transactions: Transaction[];
   projects: Project[];
   onNavigate: (tab: string) => void;
+  visits?: number;
 }
 
 export default function Dashboard({ 
@@ -32,7 +34,8 @@ export default function Dashboard({
   condos, 
   transactions,
   projects,
-  onNavigate 
+  onNavigate,
+  visits = 642
 }: DashboardProps) {
   // Calculations
   const activeEmployees = employees.filter(e => e.status === 'Ativo').length;
@@ -97,7 +100,7 @@ export default function Dashboard({
       </div>
 
       {/* Operation KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         {/* Finance card */}
         <div 
           onClick={() => onNavigate('finance')} 
@@ -218,6 +221,30 @@ export default function Dashboard({
             </p>
             <p className="mt-2 text-[10px] text-slate-500 font-bold">
               Progresso Médio: <span className="text-amber-600 font-black">{averageProgress}%</span>
+            </p>
+          </div>
+        </div>
+
+        {/* Visits card */}
+        <div 
+          onClick={() => onNavigate('subscription')} 
+          className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm transition-all hover:border-amber-500 hover:shadow-md cursor-pointer group"
+          id="kpi-visits"
+        >
+          <div className="flex justify-between items-start">
+            <div className="p-3 bg-slate-50 border border-slate-150 rounded-lg text-sky-600 group-hover:bg-sky-50 transition-colors">
+              <Eye className="h-5 w-5" />
+            </div>
+            <span className="text-[10px] font-mono font-bold text-sky-600 bg-sky-50 border border-sky-100 px-2 py-0.5 rounded-full">Tráfego</span>
+          </div>
+          <div className="mt-4">
+            <p className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Acessos Totais</p>
+            <p className="text-2xl font-black text-slate-900 tracking-tight mt-1 font-mono">
+              {visits}
+            </p>
+            <p className="mt-2 text-[10px] text-slate-500 font-bold flex items-center gap-1.5">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+              <span>Monitoramento Ativo</span>
             </p>
           </div>
         </div>

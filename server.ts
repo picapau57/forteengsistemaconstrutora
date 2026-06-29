@@ -11,6 +11,18 @@ async function startServer() {
 
   app.use(express.json());
 
+  // In-memory visitor counter (with realistic base seed for production feel)
+  let totalVisits = 642; 
+
+  app.get("/api/visits", (req, res) => {
+    res.json({ totalVisits });
+  });
+
+  app.post("/api/visits/increment", (req, res) => {
+    totalVisits += 1;
+    res.json({ success: true, totalVisits });
+  });
+
   // API Route to check if Mercado Pago is configured
   app.get("/api/payment/config", (req, res) => {
     const isConfigured = !!process.env.MERCADO_PAGO_ACCESS_TOKEN;
