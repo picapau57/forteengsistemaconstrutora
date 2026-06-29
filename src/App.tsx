@@ -13,7 +13,8 @@ import {
   Briefcase,
   DatabaseBackup,
   UserCheck,
-  Sparkles
+  Sparkles,
+  LogOut
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -28,6 +29,7 @@ import Finance from './components/Finance';
 import Condos from './components/Condos';
 import Projects from './components/Projects';
 import Plans from './components/Plans';
+import Auth from './components/Auth';
 
 // Types and mock data
 import { Employee, Attendance, Client, Material, Budget, Transaction, Condo, CondoBill, Project, Subscription } from './types';
@@ -44,6 +46,11 @@ import {
 } from './data/mockData';
 
 export default function App() {
+  const [currentUser, setCurrentUser] = useState<{ name: string; email: string; company: string; role: string } | null>(() => {
+    const saved = localStorage.getItem('const_logged_in_user');
+    return saved ? JSON.parse(saved) : null;
+  });
+
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
@@ -380,6 +387,16 @@ export default function App() {
     }
   };
 
+  const handleLoginSuccess = (user: { name: string; email: string; company: string; role: string }) => {
+    localStorage.setItem('const_logged_in_user', JSON.stringify(user));
+    setCurrentUser(user);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('const_logged_in_user');
+    setCurrentUser(null);
+  };
+
   // Navigation Links
   const navigationItems = [
     { id: 'dashboard', label: 'Painel', icon: LayoutDashboard },
@@ -393,6 +410,10 @@ export default function App() {
     { id: 'condos', label: 'Condomínios', icon: Building2 },
     { id: 'subscription', label: 'Planos & Teste', icon: Sparkles },
   ];
+
+  if (!currentUser) {
+    return <Auth onLoginSuccess={handleLoginSuccess} />;
+  }
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col md:flex-row antialiased">
@@ -513,16 +534,23 @@ export default function App() {
 
         {/* Sidebar Footer with Executive profile card */}
         <div className="border-t border-slate-800 bg-slate-900/50">
-          <div className="p-4 border-b border-slate-800/60">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-xs font-bold text-amber-500">
-                ADM
+          <div className="p-4 border-b border-slate-800/60 flex items-center justify-between">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-9 h-9 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-xs font-bold text-amber-500 uppercase shrink-0">
+                {currentUser.name.slice(0, 2)}
               </div>
-              <div>
-                <p className="text-xs font-bold text-white">Ricardo Oliveira</p>
-                <p className="text-[10px] text-slate-500">Diretor de Obras</p>
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-white truncate" title={currentUser.name}>{currentUser.name}</p>
+                <p className="text-[10px] text-slate-500 truncate" title={currentUser.role}>{currentUser.role}</p>
               </div>
             </div>
+            <button
+              onClick={handleLogout}
+              className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-slate-800 rounded transition-all cursor-pointer shrink-0"
+              title="Sair da Conta"
+            >
+              <LogOut className="h-4 w-4" />
+            </button>
           </div>
 
           {/* Reset and license button */}
