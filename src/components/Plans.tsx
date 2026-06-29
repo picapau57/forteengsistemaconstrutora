@@ -9,16 +9,18 @@ import {
   QrCode, 
   Copy, 
   Info,
-  Gift
+  Gift,
+  X
 } from 'lucide-react';
 import { Subscription } from '../types';
 
 interface PlansProps {
   subscription: Subscription;
   onUpdateSubscription: (sub: Subscription) => void;
+  userEmail?: string;
 }
 
-export default function Plans({ subscription, onUpdateSubscription }: PlansProps) {
+export default function Plans({ subscription, onUpdateSubscription, userEmail }: PlansProps) {
   const [selectedPlan, setSelectedPlan] = useState<'Mensal' | 'Anual' | 'Vitalício'>('Anual');
   const [showCheckout, setShowCheckout] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<'credit_card' | 'pix'>('pix');
@@ -83,7 +85,7 @@ export default function Plans({ subscription, onUpdateSubscription }: PlansProps
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           plan,
-          email: 'picapauinformatica@gmail.com',
+          email: userEmail || 'cliente@forteengenharia.com',
           customAccessToken: storedToken || undefined
         })
       });
@@ -225,7 +227,7 @@ export default function Plans({ subscription, onUpdateSubscription }: PlansProps
       </div>
 
       {/* Trial Countdown banner */}
-      {subscription.status === 'Trial' && (
+      {subscription.status === 'Trial' && subscription.trialDaysRemaining > 0 && (
         <div className="bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 p-5 rounded-2xl shadow-md border border-amber-400 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 animate-fadeIn">
           <div className="flex items-center gap-3">
             <div className="p-3 bg-slate-950/20 rounded-xl text-slate-950">
@@ -234,7 +236,7 @@ export default function Plans({ subscription, onUpdateSubscription }: PlansProps
             <div>
               <h3 className="text-sm font-black uppercase tracking-wider">Período de Demonstração Ativo (7 Dias Grátis)</h3>
               <p className="text-xs font-bold text-slate-950/80 mt-0.5">
-                Você está no {8 - subscription.trialDaysRemaining}º dia de testes. Restam <span className="underline">{subscription.trialDaysRemaining} dias</span> para expirar sua licença temporária.
+                Você está no {8 - subscription.trialDaysRemaining}º dia de testes. Restam <span className="underline font-black">{subscription.trialDaysRemaining} dias</span> para expirar sua licença temporária de demonstração.
               </p>
             </div>
           </div>
@@ -246,6 +248,32 @@ export default function Plans({ subscription, onUpdateSubscription }: PlansProps
             className="bg-slate-900 hover:bg-slate-850 text-amber-400 font-black px-4 py-2 rounded text-[11px] uppercase tracking-wider shadow-sm transition-all cursor-pointer shrink-0"
           >
             Ativar Assinatura Agora
+          </button>
+        </div>
+      )}
+
+      {/* Trial Expired banner */}
+      {subscription.status === 'Trial' && subscription.trialDaysRemaining === 0 && (
+        <div className="bg-gradient-to-r from-red-600 to-red-700 text-white p-5 rounded-2xl shadow-lg border border-red-500 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 animate-pulse">
+          <div className="flex items-center gap-3">
+            <div className="p-3 bg-slate-950/25 rounded-xl text-white">
+              <X className="h-6 w-6" />
+            </div>
+            <div>
+              <h3 className="text-sm font-black uppercase tracking-wider">Aviso: Período de Testes de 7 Dias Expirou</h3>
+              <p className="text-xs font-bold text-red-100 mt-0.5">
+                O seu período de testes grátis expirou. Os recursos operacionais do sistema estão bloqueados. Assine um dos planos abaixo para liberar na hora.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => {
+              setSelectedPlan('Anual');
+              setShowCheckout(true);
+            }}
+            className="bg-white hover:bg-slate-100 text-red-700 font-black px-4 py-2 rounded text-[11px] uppercase tracking-wider shadow-md transition-all cursor-pointer shrink-0"
+          >
+            Adquirir Plano Completo
           </button>
         </div>
       )}
@@ -266,11 +294,76 @@ export default function Plans({ subscription, onUpdateSubscription }: PlansProps
           </div>
           <div className="flex items-center gap-2">
             <span className="bg-white/15 px-3 py-1.5 rounded text-[10px] font-black uppercase tracking-wider border border-white/20">
-              Licença Vitalícia / Contrato Ativo
+              Contrato Ativo
             </span>
           </div>
         </div>
       )}
+
+      {/* Painel de Simulação (Para Testes e Homologação) */}
+      <div className="bg-slate-900 text-white rounded-2xl p-5 border border-slate-800 shadow-lg animate-fadeIn">
+        <div className="flex items-center gap-2 mb-3">
+          <Sparkles className="h-4.5 w-4.5 text-amber-500 animate-pulse" />
+          <h3 className="text-xs font-black uppercase tracking-wider text-slate-200">
+            Painel de Simulação & Homologação de Período de Testes
+          </h3>
+        </div>
+        <p className="text-[11px] text-slate-400 mb-4 leading-normal">
+          Utilize os botões de simulação abaixo para testar instantaneamente como a plataforma se comporta em cada estado (Teste Ativo, Teste Expirado de 7 Dias ou Assinatura Ativada). O sistema atualizará os dias e acessos em tempo real para todos os módulos!
+        </p>
+        <div className="flex flex-wrap gap-2.5">
+          <button
+            onClick={() => {
+              const start = new Date();
+              start.setDate(start.getDate() - 2); // 2 days ago = 5 remaining
+              const newSub: Subscription = {
+                status: 'Trial',
+                trialStartDate: start.toISOString().split('T')[0],
+                trialDaysRemaining: 5
+              };
+              onUpdateSubscription(newSub);
+              alert('Simulação ativada: Período de Teste Ativo (Restam 5 Dias)! Todos os módulos estão liberados para demonstração.');
+            }}
+            className="bg-amber-500 hover:bg-amber-600 text-slate-950 font-black px-3 py-2 rounded text-[10px] uppercase tracking-wider transition-all cursor-pointer shadow-sm"
+          >
+            ⚡ Simular Teste Ativo (5 dias restantes)
+          </button>
+          
+          <button
+            onClick={() => {
+              const start = new Date();
+              start.setDate(start.getDate() - 8); // 8 days ago = 0 remaining
+              const newSub: Subscription = {
+                status: 'Trial',
+                trialStartDate: start.toISOString().split('T')[0],
+                trialDaysRemaining: 0
+              };
+              onUpdateSubscription(newSub);
+              alert('Simulação ativada: Teste de 7 Dias Expirado! Os módulos operacionais e de gestão foram bloqueados.');
+            }}
+            className="bg-red-600 hover:bg-red-750 text-white font-black px-3 py-2 rounded text-[10px] uppercase tracking-wider transition-all cursor-pointer shadow-sm"
+          >
+            🚨 Simular Teste Expirado (0 dias restantes)
+          </button>
+
+          <button
+            onClick={() => {
+              const newSub: Subscription = {
+                status: 'Ativo',
+                plan: 'Anual',
+                trialStartDate: subscription.trialStartDate,
+                trialDaysRemaining: 0,
+                subscribedAt: new Date().toISOString().split('T')[0]
+              };
+              onUpdateSubscription(newSub);
+              alert('Simulação ativada: Plano Anual Ativo (Pago)! Todos os acessos operacionais e de gestão foram desbloqueados definitivamente.');
+            }}
+            className="bg-emerald-600 hover:bg-emerald-700 text-white font-black px-3 py-2 rounded text-[10px] uppercase tracking-wider transition-all cursor-pointer shadow-sm"
+          >
+            🏆 Simular Plano Pago Ativo (Anual)
+          </button>
+        </div>
+      </div>
 
       {/* Configuração de Credenciais */}
       <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs">

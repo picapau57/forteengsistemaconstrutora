@@ -47,7 +47,7 @@ async function startServer() {
         description: `Assinatura Plano ${plan} - Forte Engenharia`,
         payment_method_id: "pix",
         payer: {
-          email: email || "picapauinformatica@gmail.com",
+          email: email || "cliente@forteengenharia.com",
           first_name: "Cliente",
           last_name: "Forte Engenharia"
         }

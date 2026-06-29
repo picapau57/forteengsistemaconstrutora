@@ -89,6 +89,15 @@ export default function Auth({ onLoginSuccess }: AuthProps) {
       const updatedUsers = [...registeredUsers, newUser];
       localStorage.setItem('const_registered_users', JSON.stringify(updatedUsers));
 
+      // Pre-initialize a 7-day trial subscription for this specific user
+      const userSubKey = `const_subscription_${email.toLowerCase()}`;
+      const newSub = {
+        status: 'Trial',
+        trialStartDate: new Date().toISOString().split('T')[0],
+        trialDaysRemaining: 7
+      };
+      localStorage.setItem(userSubKey, JSON.stringify(newSub));
+
       setSuccess('Cadastro realizado com sucesso!');
       setTimeout(() => {
         setIsLogin(true);

@@ -14,7 +14,8 @@ import {
   DatabaseBackup,
   UserCheck,
   Sparkles,
-  LogOut
+  LogOut,
+  Lock
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -50,6 +51,48 @@ export default function App() {
     const saved = localStorage.getItem('const_logged_in_user');
     return saved ? JSON.parse(saved) : null;
   });
+
+  const getDynamicSubscription = (email: string): Subscription => {
+    const userSubKey = `const_subscription_${email.toLowerCase()}`;
+    const saved = localStorage.getItem(userSubKey);
+    
+    if (saved) {
+      try {
+        const parsed: Subscription = JSON.parse(saved);
+        if (parsed.status === 'Trial') {
+          const start = new Date(parsed.trialStartDate);
+          const today = new Date();
+          // Clear time to count days precisely
+          start.setHours(0, 0, 0, 0);
+          today.setHours(0, 0, 0, 0);
+          
+          const diffTime = today.getTime() - start.getTime();
+          const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+          
+          const daysRemaining = Math.max(0, 7 - diffDays);
+          
+          const updatedSub: Subscription = {
+            ...parsed,
+            trialDaysRemaining: daysRemaining
+          };
+          localStorage.setItem(userSubKey, JSON.stringify(updatedSub));
+          return updatedSub;
+        }
+        return parsed;
+      } catch (e) {
+        console.error('Error parsing subscription:', e);
+      }
+    }
+    
+    // Create a fresh 7-day trial subscription for this user
+    const newSub: Subscription = {
+      status: 'Trial',
+      trialStartDate: new Date().toISOString().split('T')[0],
+      trialDaysRemaining: 7
+    };
+    localStorage.setItem(userSubKey, JSON.stringify(newSub));
+    return newSub;
+  };
 
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -101,14 +144,57 @@ export default function App() {
   });
 
   const [subscription, setSubscription] = useState<Subscription>(() => {
-    const saved = localStorage.getItem('const_subscription');
-    if (saved) return JSON.parse(saved);
+    const loggedInUserStr = localStorage.getItem('const_logged_in_user');
+    if (loggedInUserStr) {
+      try {
+        const user = JSON.parse(loggedInUserStr);
+        const userSubKey = `const_subscription_${user.email.toLowerCase()}`;
+        const saved = localStorage.getItem(userSubKey);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed.status === 'Trial') {
+            const start = new Date(parsed.trialStartDate);
+            const today = new Date();
+            start.setHours(0, 0, 0, 0);
+            today.setHours(0, 0, 0, 0);
+            const diffTime = today.getTime() - start.getTime();
+            const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+            const daysRemaining = Math.max(0, 7 - diffDays);
+            return {
+              ...parsed,
+              trialDaysRemaining: daysRemaining
+            };
+          }
+          return parsed;
+        }
+      } catch (e) {
+        console.error('Error in state sub init:', e);
+      }
+    }
+    
+    // Fallback or default
     return {
       status: 'Trial',
       trialStartDate: new Date().toISOString().split('T')[0],
       trialDaysRemaining: 7
     };
   });
+
+  const isTrialExpired = subscription.status === 'Trial' && subscription.trialDaysRemaining === 0;
+
+  // Track subscription per user and redirect if expired
+  useEffect(() => {
+    if (currentUser) {
+      const sub = getDynamicSubscription(currentUser.email);
+      setSubscription(sub);
+    }
+  }, [currentUser]);
+
+  useEffect(() => {
+    if (currentUser && isTrialExpired) {
+      setActiveTab('subscription');
+    }
+  }, [isTrialExpired, currentUser]);
 
   // Persist state updates to localStorage
   useEffect(() => {
@@ -148,8 +234,12 @@ export default function App() {
   }, [projects]);
 
   useEffect(() => {
+    if (currentUser) {
+      const userSubKey = `const_subscription_${currentUser.email.toLowerCase()}`;
+      localStorage.setItem(userSubKey, JSON.stringify(subscription));
+    }
     localStorage.setItem('const_subscription', JSON.stringify(subscription));
-  }, [subscription]);
+  }, [subscription, currentUser]);
 
   // Operations handlers
   const handleAddEmployee = (emp: Omit<Employee, 'id'>) => {
@@ -455,21 +545,34 @@ export default function App() {
                 {navigationItems.slice(0, 3).map(item => {
                   const isActive = activeTab === item.id;
                   const Icon = item.icon;
+                  const isLocked = isTrialExpired && item.id !== 'subscription';
                   return (
                     <button
                       key={item.id}
                       onClick={() => {
+                        if (isLocked) {
+                          alert('Seu período de teste de 7 dias expirou! Adquira um plano de assinatura para liberar o acesso.');
+                          return;
+                        }
                         setActiveTab(item.id);
                         setIsSidebarOpen(false);
                       }}
-                      className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-xs font-semibold transition-all cursor-pointer ${
+                      className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-xs font-semibold transition-all cursor-pointer ${
                         isActive 
                           ? 'bg-slate-800 text-amber-400 shadow-sm' 
-                          : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                          : isLocked
+                            ? 'text-slate-600 cursor-not-allowed opacity-40 bg-slate-950/20'
+                            : 'text-slate-400 hover:text-white hover:bg-slate-800'
                       }`}
+                      disabled={isLocked && activeTab !== item.id}
                     >
-                      <Icon className={`h-4 w-4 shrink-0 ${isActive ? 'text-amber-400' : 'text-slate-500'}`} />
-                      <span>{item.label}</span>
+                      <div className="flex items-center gap-3">
+                        <Icon className={`h-4 w-4 shrink-0 ${isActive ? 'text-amber-400' : isLocked ? 'text-slate-700' : 'text-slate-500'}`} />
+                        <span>{item.label}</span>
+                      </div>
+                      {isLocked && (
+                        <Lock className="h-3.5 w-3.5 text-slate-600 shrink-0" />
+                      )}
                     </button>
                   );
                 })}
@@ -482,21 +585,34 @@ export default function App() {
                 {navigationItems.slice(3, 9).map(item => {
                   const isActive = activeTab === item.id;
                   const Icon = item.icon;
+                  const isLocked = isTrialExpired && item.id !== 'subscription';
                   return (
                     <button
                       key={item.id}
                       onClick={() => {
+                        if (isLocked) {
+                          alert('Seu período de teste de 7 dias expirou! Adquira um plano de assinatura para liberar o acesso.');
+                          return;
+                        }
                         setActiveTab(item.id);
                         setIsSidebarOpen(false);
                       }}
-                      className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-xs font-semibold transition-all cursor-pointer ${
+                      className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-xs font-semibold transition-all cursor-pointer ${
                         isActive 
                           ? 'bg-slate-800 text-amber-400 shadow-sm' 
-                          : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                          : isLocked
+                            ? 'text-slate-600 cursor-not-allowed opacity-40 bg-slate-950/20'
+                            : 'text-slate-400 hover:text-white hover:bg-slate-800'
                       }`}
+                      disabled={isLocked && activeTab !== item.id}
                     >
-                      <Icon className={`h-4 w-4 shrink-0 ${isActive ? 'text-amber-400' : 'text-slate-500'}`} />
-                      <span>{item.label}</span>
+                      <div className="flex items-center gap-3">
+                        <Icon className={`h-4 w-4 shrink-0 ${isActive ? 'text-amber-400' : isLocked ? 'text-slate-700' : 'text-slate-500'}`} />
+                        <span>{item.label}</span>
+                      </div>
+                      {isLocked && (
+                        <Lock className="h-3.5 w-3.5 text-slate-600 shrink-0" />
+                      )}
                     </button>
                   );
                 })}
@@ -509,21 +625,34 @@ export default function App() {
                 {navigationItems.slice(9).map(item => {
                   const isActive = activeTab === item.id;
                   const Icon = item.icon;
+                  const isLocked = isTrialExpired && item.id !== 'subscription';
                   return (
                     <button
                       key={item.id}
                       onClick={() => {
+                        if (isLocked) {
+                          alert('Seu período de teste de 7 dias expirou! Adquira um plano de assinatura para liberar o acesso.');
+                          return;
+                        }
                         setActiveTab(item.id);
                         setIsSidebarOpen(false);
                       }}
-                      className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-xs font-semibold transition-all cursor-pointer ${
+                      className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-xs font-semibold transition-all cursor-pointer ${
                         isActive 
                           ? 'bg-slate-800 text-amber-400 shadow-sm' 
-                          : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                          : isLocked
+                            ? 'text-slate-600 cursor-not-allowed opacity-40 bg-slate-950/20'
+                            : 'text-slate-400 hover:text-white hover:bg-slate-800'
                       }`}
+                      disabled={isLocked && activeTab !== item.id}
                     >
-                      <Icon className={`h-4 w-4 shrink-0 ${isActive ? 'text-amber-400' : 'text-slate-500'}`} />
-                      <span>{item.label}</span>
+                      <div className="flex items-center gap-3">
+                        <Icon className={`h-4 w-4 shrink-0 ${isActive ? 'text-amber-400' : isLocked ? 'text-slate-700' : 'text-slate-500'}`} />
+                        <span>{item.label}</span>
+                      </div>
+                      {isLocked && (
+                        <Lock className="h-3.5 w-3.5 text-slate-600 shrink-0" />
+                      )}
                     </button>
                   );
                 })}
@@ -595,6 +724,43 @@ export default function App() {
       {/* MAIN BODY AREA */}
       <main className="grow overflow-y-auto p-4 md:p-8 space-y-6">
         
+        {/* Trial Period / Expiry Banner */}
+        {subscription.status === 'Trial' && (
+          <div className={`p-4 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm ${
+            subscription.trialDaysRemaining === 0 
+              ? 'bg-red-500/10 border-red-500/20 text-red-700' 
+              : 'bg-amber-500/10 border-amber-500/20 text-amber-800'
+          }`}>
+            <div className="flex items-start gap-3">
+              <Sparkles className={`h-5 w-5 shrink-0 mt-0.5 ${subscription.trialDaysRemaining === 0 ? 'text-red-500' : 'text-amber-500 animate-pulse'}`} />
+              <div>
+                <p className="text-xs font-black uppercase tracking-wider">
+                  {subscription.trialDaysRemaining === 0 
+                    ? 'Período de Teste Expirado (Bloqueado)' 
+                    : `Período de Teste Ativo - Restam ${subscription.trialDaysRemaining} dias`}
+                </p>
+                <p className="text-[11px] opacity-85 leading-normal mt-0.5">
+                  {subscription.trialDaysRemaining === 0 
+                    ? 'Seu acesso aos módulos operacionais foi bloqueado após 7 dias de teste gratuito. Regularize sua assinatura de plano abaixo para liberar imediatamente o uso completo da plataforma.' 
+                    : 'Você está utilizando o sistema no modo de teste gratuito. Todos os recursos operacionais, relatórios e controle financeiro estão liberados para demonstração.'}
+                </p>
+              </div>
+            </div>
+            {activeTab !== 'subscription' && (
+              <button
+                onClick={() => setActiveTab('subscription')}
+                className={`text-xs font-black uppercase tracking-wider px-4 py-2 rounded-xl transition-all cursor-pointer shadow-sm shrink-0 text-center ${
+                  subscription.trialDaysRemaining === 0
+                    ? 'bg-red-600 hover:bg-red-700 text-white shadow-red-600/10'
+                    : 'bg-amber-500 hover:bg-amber-600 text-slate-950 shadow-amber-500/10'
+                }`}
+              >
+                {subscription.trialDaysRemaining === 0 ? 'Regularizar Assinatura' : 'Ver Planos de Assinatura'}
+              </button>
+            )}
+          </div>
+        )}
+
         {/* Render Tab Screens with subtle animations */}
         <AnimatePresence mode="wait">
           <motion.div
@@ -692,6 +858,7 @@ export default function App() {
               <Plans 
                 subscription={subscription}
                 onUpdateSubscription={handleUpdateSubscription}
+                userEmail={currentUser?.email}
               />
             )}
           </motion.div>
