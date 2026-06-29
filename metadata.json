@@ -1,0 +1,8 @@
+{
+  "name": "Gestão de Construtora",
+  "description": "Sistema completo para gestão de construtoras com controle de funcionários, ponto eletrônico, clientes, materiais, orçamentos, financeiro e condomínios.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
