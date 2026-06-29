@@ -46,19 +46,36 @@ export default function Plans({ subscription, onUpdateSubscription }: PlansProps
   } | null>(null);
   const [pollingStatus, setPollingStatus] = useState<string>('pending');
 
+  // Custom token direct integration states
+  const [customToken, setCustomToken] = useState(() => localStorage.getItem('MERCADO_PAGO_ACCESS_TOKEN') || '');
+  const [showConfig, setShowConfig] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+
   React.useEffect(() => {
     fetch('/api/payment/config')
       .then(res => res.json())
       .then(data => {
-        setMpConfigured(data.configured);
+        setMpConfigured(data.configured || !!localStorage.getItem('MERCADO_PAGO_ACCESS_TOKEN'));
       })
       .catch(err => console.error('Erro ao verificar config Mercado Pago:', err));
   }, []);
+
+  const handleSaveToken = (e: React.FormEvent) => {
+    e.preventDefault();
+    localStorage.setItem('MERCADO_PAGO_ACCESS_TOKEN', customToken);
+    setSaveSuccess(true);
+    setMpConfigured(!!customToken);
+    setTimeout(() => {
+      setSaveSuccess(false);
+    }, 2000);
+  };
 
   const handleCreatePayment = async (plan: 'Mensal' | 'Anual' | 'Vitalício') => {
     setLoadingPayment(true);
     setPaymentDetails(null);
     setPollingStatus('pending');
+    
+    const storedToken = localStorage.getItem('MERCADO_PAGO_ACCESS_TOKEN') || '';
     
     try {
       const response = await fetch('/api/payment/create', {
@@ -66,7 +83,8 @@ export default function Plans({ subscription, onUpdateSubscription }: PlansProps
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           plan,
-          email: 'picapauinformatica@gmail.com'
+          email: 'picapauinformatica@gmail.com',
+          customAccessToken: storedToken || undefined
         })
       });
 
@@ -92,9 +110,11 @@ export default function Plans({ subscription, onUpdateSubscription }: PlansProps
   React.useEffect(() => {
     if (!paymentDetails || paymentDetails.status === 'approved' || pollingStatus === 'approved') return;
 
+    const storedToken = localStorage.getItem('MERCADO_PAGO_ACCESS_TOKEN') || '';
+
     const interval = setInterval(async () => {
       try {
-        const response = await fetch(`/api/payment/status/${paymentDetails.id}`);
+        const response = await fetch(`/api/payment/status/${paymentDetails.id}?token=${encodeURIComponent(storedToken)}`);
         if (!response.ok) return;
         const data = await response.json();
         
@@ -251,6 +271,58 @@ export default function Plans({ subscription, onUpdateSubscription }: PlansProps
           </div>
         </div>
       )}
+
+      {/* Configuração de Credenciais */}
+      <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs">
+        <button
+          onClick={() => setShowConfig(!showConfig)}
+          className="w-full flex justify-between items-center text-left cursor-pointer outline-none"
+        >
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-4.5 w-4.5 text-amber-500 animate-pulse" />
+            <h3 className="text-xs font-black uppercase tracking-wider text-slate-800">
+              Configurar minhas credenciais (Mercado Pago Pix)
+            </h3>
+          </div>
+          <span className="text-xs font-bold text-slate-400 hover:text-slate-600 transition-colors">
+            {showConfig ? 'Recolher [-]' : 'Configurar Chave API [+]'}
+          </span>
+        </button>
+
+        {showConfig && (
+          <form onSubmit={handleSaveToken} className="mt-4 pt-4 border-t border-slate-100 space-y-3.5 animate-fadeIn">
+            <div className="bg-amber-50 p-3 rounded-lg border border-amber-100 text-[10px] leading-relaxed text-amber-900 flex items-start gap-2">
+              <Info className="h-4 w-4 shrink-0 mt-0.5 text-amber-600" />
+              <div>
+                <span>Para usar transações reais de Pix, insira o seu <strong>Access Token de Produção ou Sandbox</strong> do Mercado Pago. O token será salvo de forma segura apenas no seu navegador local e transmitido em requisições seguras HTTPS.</span>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-[10px] uppercase font-black text-slate-400">Mercado Pago Access Token</label>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <input
+                  type="password"
+                  value={customToken}
+                  onChange={(e) => setCustomToken(e.target.value)}
+                  placeholder="APP_USR-..."
+                  className="grow bg-slate-50 border border-slate-200 rounded px-3 py-2 text-xs font-mono text-slate-700 outline-none placeholder:text-slate-300"
+                />
+                <button
+                  type="submit"
+                  className="bg-amber-500 hover:bg-amber-600 text-white font-black px-4 py-2 rounded text-[11px] uppercase tracking-wider transition-all cursor-pointer shadow-xs shrink-0"
+                >
+                  {saveSuccess ? 'Salvo com Sucesso! ✓' : 'Salvar Chave'}
+                </button>
+              </div>
+            </div>
+
+            <p className="text-[10px] text-slate-400 leading-normal">
+              💡 <strong>Como obter?</strong> Acesse o painel de desenvolvedores do <a href="https://developers.mercadopago.com/" target="_blank" rel="noreferrer" className="text-amber-600 underline font-bold">Mercado Pago</a>, vá em "Suas integrações", crie/selecione um aplicativo e em "Credenciais de produção" ou "Credenciais de testes", copie o campo "Access token".
+            </p>
+          </form>
+        )}
+      </div>
 
       {/* Pricing Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

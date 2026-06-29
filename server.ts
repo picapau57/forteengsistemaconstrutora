@@ -19,13 +19,13 @@ async function startServer() {
 
   // API Route to create PIX payment
   app.post("/api/payment/create", async (req, res) => {
-    const { plan, email } = req.body;
+    const { plan, email, customAccessToken } = req.body;
     
     let amount = 399.00;
     if (plan === 'Mensal') amount = 49.90;
     else if (plan === 'Vitalício') amount = 899.00;
 
-    const accessToken = process.env.MERCADO_PAGO_ACCESS_TOKEN;
+    const accessToken = customAccessToken || process.env.MERCADO_PAGO_ACCESS_TOKEN;
 
     if (!accessToken) {
       // Return high-fidelity simulated payment details
@@ -98,7 +98,8 @@ async function startServer() {
   // API Route to check status of PIX payment
   app.get("/api/payment/status/:id", async (req, res) => {
     const paymentId = req.params.id;
-    const accessToken = process.env.MERCADO_PAGO_ACCESS_TOKEN;
+    const customAccessToken = req.headers['x-mp-access-token'] as string || req.query.token as string;
+    const accessToken = customAccessToken || process.env.MERCADO_PAGO_ACCESS_TOKEN;
 
     if (paymentId.startsWith("sim-")) {
       // Simulated payments can be queried and are always mock approved
