@@ -31,6 +31,143 @@ export default function Plans({ subscription, onUpdateSubscription }: PlansProps
   const [cardExpiry, setCardExpiry] = useState('');
   const [cardCvv, setCardCvv] = useState('');
 
+  // Mercado Pago states
+  const [mpConfigured, setMpConfigured] = useState(false);
+  const [loadingPayment, setLoadingPayment] = useState(false);
+  const [paymentDetails, setPaymentDetails] = useState<{
+    id: string;
+    status: string;
+    isSimulated: boolean;
+    qr_code: string;
+    qr_code_base64: string;
+    ticket_url?: string;
+    amount: number;
+    plan: string;
+  } | null>(null);
+  const [pollingStatus, setPollingStatus] = useState<string>('pending');
+
+  React.useEffect(() => {
+    fetch('/api/payment/config')
+      .then(res => res.json())
+      .then(data => {
+        setMpConfigured(data.configured);
+      })
+      .catch(err => console.error('Erro ao verificar config Mercado Pago:', err));
+  }, []);
+
+  const handleCreatePayment = async (plan: 'Mensal' | 'Anual' | 'Vitalício') => {
+    setLoadingPayment(true);
+    setPaymentDetails(null);
+    setPollingStatus('pending');
+    
+    try {
+      const response = await fetch('/api/payment/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          plan,
+          email: 'picapauinformatica@gmail.com'
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Erro ao gerar pagamento');
+      }
+
+      const data = await response.json();
+      setPaymentDetails(data);
+    } catch (error) {
+      console.error('Erro ao gerar pagamento via Pix:', error);
+    } finally {
+      setLoadingPayment(false);
+    }
+  };
+
+  React.useEffect(() => {
+    if (showCheckout) {
+      handleCreatePayment(selectedPlan);
+    }
+  }, [showCheckout, selectedPlan]);
+
+  React.useEffect(() => {
+    if (!paymentDetails || paymentDetails.status === 'approved' || pollingStatus === 'approved') return;
+
+    const interval = setInterval(async () => {
+      try {
+        const response = await fetch(`/api/payment/status/${paymentDetails.id}`);
+        if (!response.ok) return;
+        const data = await response.json();
+        
+        if (data.status === 'approved') {
+          setPollingStatus('approved');
+          clearInterval(interval);
+          
+          // Activate subscription!
+          const newSub: Subscription = {
+            status: 'Ativo',
+            plan: selectedPlan,
+            trialStartDate: subscription.trialStartDate,
+            trialDaysRemaining: 0,
+            subscribedAt: new Date().toISOString().split('T')[0]
+          };
+          onUpdateSubscription(newSub);
+          
+          setTimeout(() => {
+            setShowCheckout(false);
+            setPaymentDetails(null);
+            alert(`Pagamento confirmado! Sua assinatura do Plano ${selectedPlan} foi ativada com sucesso.`);
+          }, 2000);
+        }
+      } catch (err) {
+        console.error('Erro ao verificar status do pagamento:', err);
+      }
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [paymentDetails, pollingStatus, selectedPlan]);
+
+  const handleCopyPix = () => {
+    const pixCode = paymentDetails?.qr_code || '00020101021126580014br.gov.bcb.pix0136forteengenhariahb8f9a0c-7b2e-4b9a-8f92-c2e3a1d94b1a5204000053039865405399.005802BR5916Forte Engenharia6009SAO PAULO62070503***6304D1A0';
+    navigator.clipboard.writeText(pixCode);
+    setCopiedPix(true);
+    setTimeout(() => setCopiedPix(false), 2000);
+  };
+
+  const handleSimulateApproval = () => {
+    setPollingStatus('approved');
+    const newSub: Subscription = {
+      status: 'Ativo',
+      plan: selectedPlan,
+      trialStartDate: subscription.trialStartDate,
+      trialDaysRemaining: 0,
+      subscribedAt: new Date().toISOString().split('T')[0]
+    };
+    onUpdateSubscription(newSub);
+    setTimeout(() => {
+      setShowCheckout(false);
+      setPaymentDetails(null);
+      alert(`Simulação: Pagamento do Plano ${selectedPlan} confirmado via Pix com sucesso!`);
+    }, 1500);
+  };
+
+  const handleProcessPayment = (e: React.FormEvent) => {
+    e.preventDefault();
+    setPaymentDone(true);
+    setTimeout(() => {
+      const newSub: Subscription = {
+        status: 'Ativo',
+        plan: selectedPlan,
+        trialStartDate: subscription.trialStartDate,
+        trialDaysRemaining: 0,
+        subscribedAt: new Date().toISOString().split('T')[0]
+      };
+      onUpdateSubscription(newSub);
+      setShowCheckout(false);
+      setPaymentDone(false);
+      alert(`Parabéns! Sua assinatura do Plano ${selectedPlan} foi ativada com sucesso.`);
+    }, 1500);
+  };
+
   const plansDetails = {
     Mensal: {
       price: 'R$ 49,90',
@@ -50,34 +187,6 @@ export default function Plans({ subscription, onUpdateSubscription }: PlansProps
       savings: 'Melhor Valor',
       badge: 'Sem Mensalidade'
     }
-  };
-
-  const handleCopyPix = () => {
-    navigator.clipboard.writeText('00020101021126580014br.gov.bcb.pix0136forteengenhariahb8f9a0c-7b2e-4b9a-8f92-c2e3a1d94b1a5204000053039865405399.005802BR5916Forte Engenharia6009SAO PAULO62070503***6304D1A0');
-    setCopiedPix(true);
-    setTimeout(() => setCopiedPix(false), 2000);
-  };
-
-  const handleProcessPayment = (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    // Simulate API delay
-    setPaymentDone(true);
-    setTimeout(() => {
-      // Activate subscription!
-      const newSub: Subscription = {
-        status: 'Ativo',
-        plan: selectedPlan,
-        trialStartDate: subscription.trialStartDate,
-        trialDaysRemaining: 0,
-        subscribedAt: new Date().toISOString().split('T')[0]
-      };
-      
-      onUpdateSubscription(newSub);
-      setShowCheckout(false);
-      setPaymentDone(false);
-      alert(`Parabéns! Sua assinatura do Plano ${selectedPlan} foi ativada com sucesso. Obrigado por confiar na Forte Engenharia!`);
-    }, 1500);
   };
 
   return (
@@ -320,7 +429,7 @@ export default function Plans({ subscription, onUpdateSubscription }: PlansProps
       {/* CHECKOUT SIMULATOR OVERLAY MODAL */}
       {showCheckout && (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 flex items-center justify-center p-4 backdrop-blur-xs animate-fadeIn">
-          <div className="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-2xl border border-slate-250 flex flex-col">
+          <div className="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-2xl border border-slate-200 flex flex-col">
             
             {/* Modal Header */}
             <div className="bg-slate-900 text-white p-5 flex justify-between items-center">
@@ -329,8 +438,11 @@ export default function Plans({ subscription, onUpdateSubscription }: PlansProps
                 <p className="text-[10px] text-slate-400 font-medium mt-0.5">Assinando: Plano {selectedPlan} ({plansDetails[selectedPlan].price})</p>
               </div>
               <button 
-                onClick={() => setShowCheckout(false)}
-                className="text-slate-400 hover:text-white text-xs font-bold cursor-pointer"
+                onClick={() => {
+                  setShowCheckout(false);
+                  setPaymentDetails(null);
+                }}
+                className="text-slate-400 hover:text-white text-xs font-bold cursor-pointer transition-colors"
               >
                 Fechar
               </button>
@@ -367,45 +479,97 @@ export default function Plans({ subscription, onUpdateSubscription }: PlansProps
                 </button>
               </div>
 
-              {paymentMethod === 'pix' ? (
+              {/* Status / Notice alerts */}
+              {paymentMethod === 'pix' && (
+                <div className="bg-slate-50 p-3 rounded-lg border border-slate-150 text-[10px] leading-relaxed text-slate-600 flex items-start gap-2">
+                  <Info className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+                  <div>
+                    {mpConfigured ? (
+                      <span>Pagamento integrado diretamente via **Mercado Pago**. O plano será ativado imediatamente após a transferência bancária ser compensada.</span>
+                    ) : (
+                      <span>**Ambiente de Demonstração**: adicione a variável `MERCADO_PAGO_ACCESS_TOKEN` no painel de segredos para transações reais. Use o simulador de aprovação abaixo para testar.</span>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {loadingPayment ? (
+                /* LOADER STATE */
+                <div className="py-12 flex flex-col items-center justify-center gap-3">
+                  <div className="h-8 w-8 rounded-full border-2 border-amber-500 border-t-transparent animate-spin"></div>
+                  <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider animate-pulse">Gerando Pix no Mercado Pago...</p>
+                </div>
+              ) : paymentMethod === 'pix' && paymentDetails ? (
                 /* PIX INTERFACE */
                 <div className="space-y-4 text-center animate-fadeIn">
-                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col items-center gap-2">
-                    {/* Generates placeholder beautiful QR Code for premium feel */}
-                    <div className="w-36 h-36 bg-white p-2.5 border border-slate-250 rounded shadow-xs flex items-center justify-center">
-                      <QrCode className="h-28 w-28 text-slate-900" />
+                  
+                  {pollingStatus === 'approved' ? (
+                    <div className="py-6 flex flex-col items-center justify-center gap-3 text-emerald-600 animate-scaleUp">
+                      <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-full">
+                        <ShieldCheck className="h-10 w-10 text-emerald-600 animate-pulse" />
+                      </div>
+                      <h5 className="text-sm font-black uppercase tracking-wider">Pagamento Confirmado!</h5>
+                      <p className="text-[11px] text-slate-500 font-bold">Ativando sua assinatura do Plano {selectedPlan}...</p>
                     </div>
-                    <p className="text-[10px] text-slate-400 font-medium">Escaneie o QR Code acima no aplicativo do seu banco.</p>
-                  </div>
+                  ) : (
+                    <>
+                      <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col items-center gap-3">
+                        <div className="w-40 h-40 bg-white p-2.5 border border-slate-250 rounded shadow-xs flex items-center justify-center relative">
+                          {paymentDetails.qr_code_base64 && paymentDetails.qr_code_base64 !== 'MOCK_QR_CODE' ? (
+                            <img 
+                              src={`data:image/png;base64,${paymentDetails.qr_code_base64}`} 
+                              alt="QR Code Pix" 
+                              className="h-36 w-36 rounded"
+                            />
+                          ) : (
+                            <div className="flex flex-col items-center justify-center text-slate-800 gap-1.5 p-2">
+                              <QrCode className="h-20 w-20 text-slate-900" />
+                              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">[ QR CODE SIMULADO ]</span>
+                            </div>
+                          )}
+                        </div>
+                        
+                        <div className="flex items-center justify-center gap-2 text-[10px] font-bold text-slate-500 uppercase">
+                          <span className="h-2 w-2 rounded-full bg-emerald-500 animate-ping"></span>
+                          <span>Aguardando transferência via Pix...</span>
+                        </div>
+                        <p className="text-[9px] text-slate-400 font-medium">Escaneie o QR Code acima usando o aplicativo do seu banco ou copie a chave Pix abaixo.</p>
+                      </div>
 
-                  <div className="space-y-1.5 text-left">
-                    <label className="text-[9px] uppercase font-bold text-slate-400">Pix Copia e Cola</label>
-                    <div className="flex gap-1.5">
-                      <input
-                        type="text"
-                        readOnly
-                        value="00020101021126580014br.gov.bcb.pix0136forteengenhariahb8f9a0c-7b..."
-                        className="grow bg-slate-50 border border-slate-200 rounded p-1.5 text-[10px] font-mono text-slate-500 outline-none"
-                      />
-                      <button
-                        type="button"
-                        onClick={handleCopyPix}
-                        className="bg-slate-900 hover:bg-slate-850 text-white font-bold p-1.5 rounded transition-all cursor-pointer flex items-center justify-center shrink-0"
-                        title="Copiar Pix"
-                      >
-                        {copiedPix ? <Check className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}
-                      </button>
-                    </div>
-                  </div>
+                      <div className="space-y-1 text-left">
+                        <label className="text-[9px] uppercase font-bold text-slate-400">Pix Copia e Cola</label>
+                        <div className="flex gap-1.5">
+                          <input
+                            type="text"
+                            readOnly
+                            value={paymentDetails.qr_code}
+                            className="grow bg-slate-50 border border-slate-200 rounded p-2 text-[10px] font-mono text-slate-600 outline-none select-all"
+                          />
+                          <button
+                            type="button"
+                            onClick={handleCopyPix}
+                            className="bg-slate-900 hover:bg-slate-800 text-white font-bold px-3 py-2 rounded transition-all cursor-pointer flex items-center justify-center shrink-0"
+                            title="Copiar Pix"
+                          >
+                            {copiedPix ? <Check className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}
+                          </button>
+                        </div>
+                      </div>
 
-                  <button
-                    type="button"
-                    onClick={(e) => handleProcessPayment(e)}
-                    disabled={paymentDone}
-                    className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold py-2 rounded text-[11px] uppercase tracking-wider transition-all cursor-pointer shadow-sm"
-                  >
-                    {paymentDone ? 'Verificando Pix...' : 'Já fiz o pagamento via Pix'}
-                  </button>
+                      {/* Simulator approval helper button */}
+                      {paymentDetails.isSimulated && (
+                        <div className="pt-2 border-t border-dashed border-slate-200 mt-2">
+                          <button
+                            type="button"
+                            onClick={handleSimulateApproval}
+                            className="w-full bg-amber-500 hover:bg-amber-600 text-white font-black py-2 rounded text-[10px] uppercase tracking-wider transition-all cursor-pointer shadow-sm"
+                          >
+                            ⚡ Simular Confirmação de Pix (Aprovar)
+                          </button>
+                        </div>
+                      )}
+                    </>
+                  )}
                 </div>
               ) : (
                 /* CREDIT CARD INTERFACE */
@@ -464,7 +628,7 @@ export default function Plans({ subscription, onUpdateSubscription }: PlansProps
                   <button
                     type="submit"
                     disabled={paymentDone}
-                    className="w-full bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white font-bold py-2 rounded.5 text-[11px] uppercase tracking-wider transition-all cursor-pointer shadow-sm mt-2"
+                    className="w-full bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white font-bold py-2 rounded text-[11px] uppercase tracking-wider transition-all cursor-pointer shadow-sm mt-2"
                   >
                     {paymentDone ? 'Processando transação...' : `Confirmar e pagar ${plansDetails[selectedPlan].price}`}
                   </button>
@@ -472,8 +636,8 @@ export default function Plans({ subscription, onUpdateSubscription }: PlansProps
               )}
 
               <p className="text-[10px] text-slate-400 text-center font-medium flex items-center justify-center gap-1 mt-2">
-                <ShieldCheck className="h-4 w-4 text-emerald-500" />
-                Seus dados estão protegidos por criptografia de ponta a ponta.
+                <ShieldCheck className="h-4 w-4 text-emerald-500 animate-pulse" />
+                Segurança certificada pelo Mercado Pago.
               </p>
             </div>
 
