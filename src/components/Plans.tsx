@@ -10,7 +10,8 @@ import {
   Copy, 
   Info,
   Gift,
-  X
+  X,
+  Users
 } from 'lucide-react';
 import { Subscription } from '../types';
 
@@ -26,6 +27,58 @@ export default function Plans({ subscription, onUpdateSubscription, userEmail }:
   const [paymentMethod, setPaymentMethod] = useState<'credit_card' | 'pix'>('pix');
   const [copiedPix, setCopiedPix] = useState(false);
   const [paymentDone, setPaymentDone] = useState(false);
+
+  // Registered users states and license resolution
+  const defaultUser = {
+    name: 'Ricardo Oliveira',
+    email: 'admin@forte.com',
+    password: 'admin',
+    company: 'Forte Engenharia',
+    role: 'Diretor de Obras'
+  };
+
+  const [registeredUsers] = useState<any[]>(() => {
+    const saved = localStorage.getItem('const_registered_users');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        return [defaultUser];
+      }
+    }
+    return [defaultUser];
+  });
+
+  const getUserSubscription = (email: string): Subscription => {
+    const userSubKey = `const_subscription_${email.toLowerCase()}`;
+    const saved = localStorage.getItem(userSubKey);
+    if (saved) {
+      try {
+        const parsed: Subscription = JSON.parse(saved);
+        if (parsed.status === 'Trial') {
+          const start = new Date(parsed.trialStartDate);
+          const today = new Date();
+          start.setHours(0, 0, 0, 0);
+          today.setHours(0, 0, 0, 0);
+          const diffTime = today.getTime() - start.getTime();
+          const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+          const daysRemaining = Math.max(0, 7 - diffDays);
+          return {
+            ...parsed,
+            trialDaysRemaining: daysRemaining
+          };
+        }
+        return parsed;
+      } catch (e) {
+        // Fallback below
+      }
+    }
+    return {
+      status: 'Trial',
+      trialStartDate: new Date().toISOString().split('T')[0],
+      trialDaysRemaining: 7
+    };
+  };
 
   // Credit card mock inputs
   const [cardNumber, setCardNumber] = useState('');
@@ -415,6 +468,172 @@ export default function Plans({ subscription, onUpdateSubscription, userEmail }:
             </p>
           </form>
         )}
+      </div>
+
+      {/* PAINEL DE CONTROLE DE LICENÇAS E USUÁRIOS */}
+      <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs space-y-4 animate-fadeIn" id="user-licenses-panel">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+          <div className="flex items-center gap-2">
+            <Users className="h-5 w-5 text-amber-500" />
+            <div>
+              <h3 className="text-xs font-black uppercase tracking-wider text-slate-800">
+                Usuários Registrados & Status de Licença
+              </h3>
+              <p className="text-[10px] text-slate-400 font-medium">Controle de acessos, período de testes (7 dias) e assinaturas em tempo real.</p>
+            </div>
+          </div>
+          <span className="bg-slate-100 text-slate-600 px-3 py-1 rounded text-[10px] font-black uppercase tracking-wider border border-slate-200 shrink-0 self-start sm:self-auto">
+            Total: {registeredUsers.length} {registeredUsers.length === 1 ? 'Usuário' : 'Usuários'}
+          </span>
+        </div>
+
+        {/* Módulos de Estatísticas Rápidas */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5">
+          <div className="bg-slate-50 border border-slate-150 p-3 rounded-xl flex flex-col justify-between">
+            <span className="text-[9px] uppercase font-bold text-slate-400 tracking-wider">Total de Contas</span>
+            <span className="text-xl font-black text-slate-800 mt-1 font-mono">{registeredUsers.length}</span>
+          </div>
+
+          <div className="bg-amber-50/40 border border-amber-100 p-3 rounded-xl flex flex-col justify-between">
+            <span className="text-[9px] uppercase font-bold text-amber-700 tracking-wider">Em Período de Teste</span>
+            <div className="flex items-baseline gap-1 mt-1">
+              <span className="text-xl font-black text-amber-800 font-mono">
+                {registeredUsers.filter(u => {
+                  const sub = getUserSubscription(u.email);
+                  return sub.status === 'Trial' && sub.trialDaysRemaining! > 0;
+                }).length}
+              </span>
+              <span className="text-[9px] text-amber-600 font-bold">ativos</span>
+            </div>
+          </div>
+
+          <div className="bg-emerald-50/40 border border-emerald-150 p-3 rounded-xl flex flex-col justify-between">
+            <span className="text-[9px] uppercase font-bold text-emerald-700 tracking-wider">Assinantes Ativos</span>
+            <div className="flex items-baseline gap-1 mt-1">
+              <span className="text-xl font-black text-emerald-800 font-mono">
+                {registeredUsers.filter(u => getUserSubscription(u.email).status === 'Ativo').length}
+              </span>
+              <span className="text-[9px] text-emerald-600 font-bold">planos pagos</span>
+            </div>
+          </div>
+
+          <div className="bg-red-50/30 border border-red-100 p-3 rounded-xl flex flex-col justify-between">
+            <span className="text-[9px] uppercase font-bold text-red-700 tracking-wider">Testes Expirados</span>
+            <div className="flex items-baseline gap-1 mt-1">
+              <span className="text-xl font-black text-red-800 font-mono">
+                {registeredUsers.filter(u => {
+                  const sub = getUserSubscription(u.email);
+                  return sub.status === 'Trial' && sub.trialDaysRemaining === 0;
+                }).length}
+              </span>
+              <span className="text-[9px] text-red-500 font-bold">bloqueados</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Lista Detalhada de Contas e Suas Respectivas Licenças */}
+        <div className="overflow-x-auto border border-slate-100 rounded-xl">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-slate-50 border-b border-slate-100 text-[10px] uppercase font-black text-slate-400 tracking-wider">
+                <th className="px-4 py-3">Colaborador / Empresa</th>
+                <th className="px-4 py-3">E-mail</th>
+                <th className="px-4 py-3">Cargo</th>
+                <th className="px-4 py-3">Status da Licença</th>
+                <th className="px-4 py-3 text-right">Ação Rápida</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 text-xs">
+              {registeredUsers.map((user, idx) => {
+                const sub = getUserSubscription(user.email);
+                const isUserActive = userEmail?.toLowerCase() === user.email.toLowerCase();
+                
+                return (
+                  <tr key={idx} className={`hover:bg-slate-50/50 transition-colors ${isUserActive ? 'bg-amber-500/5' : ''}`}>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <div className="h-6 w-6 rounded-full bg-slate-100 text-slate-600 text-[10px] font-black flex items-center justify-center uppercase border border-slate-200">
+                          {user.name.charAt(0)}
+                        </div>
+                        <div>
+                          <p className="font-bold text-slate-800 flex items-center gap-1.5">
+                            {user.name}
+                            {isUserActive && (
+                              <span className="bg-amber-500 text-slate-950 font-black text-[9px] px-1.5 py-0.5 rounded uppercase">Você</span>
+                            )}
+                          </p>
+                          <p className="text-[10px] text-slate-400 font-medium">{user.company || 'Forte Engenharia'}</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 font-mono text-slate-500 text-[11px]">{user.email}</td>
+                    <td className="px-4 py-3 text-slate-600 font-medium">{user.role || 'Usuário'}</td>
+                    <td className="px-4 py-3">
+                      {sub.status === 'Ativo' ? (
+                        <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 border border-emerald-100 px-2 py-0.5 rounded text-[10px] font-bold">
+                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
+                          Plano {sub.plan} Ativo
+                        </span>
+                      ) : sub.trialDaysRemaining === 0 ? (
+                        <span className="inline-flex items-center gap-1 bg-red-50 text-red-700 border border-red-100 px-2 py-0.5 rounded text-[10px] font-bold">
+                          <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse"></span>
+                          Teste Expirado (Bloqueado)
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-800 border border-amber-100 px-2 py-0.5 rounded text-[10px] font-bold">
+                          <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+                          Teste: {sub.trialDaysRemaining} dias restantes
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <button
+                        onClick={() => {
+                          const isCurrentlyPaid = sub.status === 'Ativo';
+                          let newSub: Subscription;
+                          if (isCurrentlyPaid) {
+                            // Turn into Trial with 7 days
+                            newSub = {
+                              status: 'Trial',
+                              trialStartDate: new Date().toISOString().split('T')[0],
+                              trialDaysRemaining: 7
+                            };
+                            alert(`Licença de ${user.name} alterada para Teste de 7 Dias!`);
+                          } else {
+                            // Turn into Active paid
+                            newSub = {
+                              status: 'Ativo',
+                              plan: 'Anual',
+                              trialStartDate: sub.trialStartDate,
+                              trialDaysRemaining: 0,
+                              subscribedAt: new Date().toISOString().split('T')[0]
+                            };
+                            alert(`Licença de ${user.name} alterada para Plano Anual Ativo!`);
+                          }
+                          
+                          // Save user specific sub key
+                          const userSubKey = `const_subscription_${user.email.toLowerCase()}`;
+                          localStorage.setItem(userSubKey, JSON.stringify(newSub));
+                          
+                          // If current user, update root state
+                          if (isUserActive) {
+                            onUpdateSubscription(newSub);
+                          } else {
+                            // Force refresh of the component
+                            window.dispatchEvent(new Event('storage'));
+                          }
+                        }}
+                        className="text-[10px] font-black uppercase tracking-wider text-amber-600 hover:text-amber-700 cursor-pointer transition-colors"
+                      >
+                        {sub.status === 'Ativo' ? 'Remover Plano' : 'Liberar Plano'}
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* Pricing Cards Grid */}
